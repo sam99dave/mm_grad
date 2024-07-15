@@ -293,21 +293,21 @@ struct Value:
             dl/dx = dl/dz * dz/dx == 2 * 1
         """
 
-        var val: Value = ptr_v.load() # this returns a copy of the value therefore update has to be done to the ptr_v
+        var val: Value = ptr_v.load()
         if val.l == Pointer[Value]():
-            print("Inside ptr null check")
             return 
+        
+        # For safety check, bicasting it (not required though)
+        var left: Value = val.l.bitcast[Value]().load()
 
-        var l_update: Float32 = val.l.load().grad.load() + val.grad.load()
-        ptr_v.load().l.load().grad.store(l_update)
+        left.grad.store(left.grad.load() + val.grad.load())
 
         if val.r == Pointer[Value]():
-            print("Inside ptr null check")
             return
 
-        var r_update: Float32 = val.r.load().grad.load() + val.grad.load()
-        ptr_v.load().r.load().grad.store(r_update)
+        var right: Value = val.l.bitcast[Value]().load()
 
+        right.grad.store(right.grad.load() + val.grad.load())
     
     # --> mul #
     @staticmethod
@@ -324,15 +324,17 @@ struct Value:
         var val: Value = ptr_v.load()
 
         if val.l == Pointer[Value]() or val.r == Pointer[Value]():
-            print("Inside ptr null check")
             return
+        
+        var left: Value = val.l.bitcast[Value]().load()
+        var right: Value = val.r.bitcast[Value]().load()
 
-        var l_update: Float32 = val.l.load().grad.load() + (val.grad.load() * val.r.load().data.load())
-        ptr_v.load().l.load().grad.store(l_update)
-
-        var r_update: Float32 = val.r.load().grad.load() + (val.grad.load() * val.l.load().data.load())
-        ptr_v.load().r.load().grad.store(r_update)
-
+        left.grad.store(
+            left.grad.load() + (val.grad.load() * right.data.load())
+        )
+        right.grad.store(
+            right.grad.load() + (val.grad.load() * left.data.load())
+        )
     
     # --> pow #
     @staticmethod
@@ -352,17 +354,18 @@ struct Value:
         var val: Value = ptr_v.load()
 
         if val.l == Pointer[Value]() or val.r == Pointer[Value]():
-            print("Inside ptr null check")
             return
 
-        var l_update: Float32 = val.l.load().grad.load() + (
-            val.grad.load() * val.r.load().data.load() * (
-                val.l.load().data.load() ** (val.r.load().data.load() - 1)
+        var left: Value = val.l.bitcast[Value]().load()
+        var right: Value = val.r.bitcast[Value]().load()
+
+        left.grad.store(
+            left.grad.load() + (
+                val.grad.load() * right.data.load() * (
+                    left.data.load() ** (right.data.load() - 1)
+                )
             )
         )
-
-        ptr_v.load().l.load().grad.store(l_update)
-
 
     # --> relu #
     @staticmethod
@@ -381,7 +384,6 @@ struct Value:
         var val: Value = ptr_v.load()
 
         if val.l == Pointer[Value]():
-            print("Inside ptr null check")
             return 
         
         var left: Value = val.l.bitcast[Value]().load()
@@ -392,13 +394,9 @@ struct Value:
             )
         )
 
-        var l_update: Float32 = val.l.load().grad.load() + (val.grad.load() if val.l.load().data.load() > 0 else 0)
-        ptr_v.load().l.load().grad.store(l_update)
-
     @staticmethod
     fn _backward(inout ptr: Pointer[Value]):
         if ptr == Pointer[Value]():
-            print("Inside ptr null check")
             return
         
         var op: String = ptr.load()._op
